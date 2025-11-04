@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // CORS 헤더 설정
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -16,7 +15,7 @@ export default async function handler(req, res) {
     const { audio_url, language_code, apiKey } = req.body;
 
     if (!apiKey) {
-      return res.status(400).json({ error: 'API key is required' });
+      return res.status(400).json({ error: 'API key is required in request body' });
     }
 
     if (!audio_url) {
@@ -37,14 +36,21 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Transcribe failed: ${response.status}`);
+      console.error('AssemblyAI transcribe error:', errorText);
+      return res.status(response.status).json({ 
+        error: `Transcribe failed: ${response.status}`,
+        details: errorText
+      });
     }
 
     const data = await response.json();
     return res.status(200).json(data);
     
   } catch (error) {
-    console.error('Transcribe error:', error);
-    return res.status(500).json({ error: error.message });
+    console.error('Transcribe handler error:', error);
+    return res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
   }
 }
