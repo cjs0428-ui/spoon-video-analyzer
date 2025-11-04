@@ -22,10 +22,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No file data' });
     }
 
-    // Base64를 Buffer로 변환
     const buffer = Buffer.from(base64Data, 'base64');
 
-    // AssemblyAI에 업로드
     const response = await fetch('https://api.assemblyai.com/v2/upload', {
       method: 'POST',
       headers: {
