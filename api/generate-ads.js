@@ -12,14 +12,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { japaneseText, apiKey } = req.body;
+    const { japaneseText, koreanText, userPrompt, apiKey } = req.body;
 
     if (!apiKey) {
       return res.status(400).json({ error: 'OpenAI API key required' });
     }
 
-    if (!japaneseText) {
-      return res.status(400).json({ error: 'Japanese text required' });
+    if (!japaneseText || !koreanText || !userPrompt) {
+      return res.status(400).json({ error: 'All fields required' });
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -60,7 +60,7 @@ Spoon 플랫폼의 특징(음성 방송, 실시간 소통, 수익화)을 강조�
           },
           {
             role: 'user',
-            content: `영상에서 추출한 일본어 텍스트:\n${japaneseText}\n\n이 내용을 바탕으로 Spoon 플랫폼 광고 문구를 생성해주세요.`
+            content: `영상에서 추출한 일본어 텍스트:\n${japaneseText}\n\n한글 번역:\n${koreanText}\n\n사용자 지시사항:\n${userPrompt}\n\n위 내용을 모두 참고하여 Spoon 플랫폼 광고 문구를 생성해주세요.`
           }
         ],
         temperature: 0.7,
