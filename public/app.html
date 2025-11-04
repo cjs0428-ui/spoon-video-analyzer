@@ -16,26 +16,28 @@
         const { useState } = React;
         
         function SpoonVideoAnalyzer() {
-          const [apiKey, setApiKey] = useState('');
-          const [showApiKey, setShowApiKey] = useState(false);
+          const [assemblyApiKey, setAssemblyApiKey] = useState('');
+          const [openaiApiKey, setOpenaiApiKey] = useState('');
+          const [showAssemblyKey, setShowAssemblyKey] = useState(false);
+          const [showOpenaiKey, setShowOpenaiKey] = useState(false);
           const [apiKeySet, setApiKeySet] = useState(false);
           const [videoFile, setVideoFile] = useState(null);
           const [videoSrc, setVideoSrc] = useState('');
           const [fileName, setFileName] = useState('');
           const [japaneseText, setJapaneseText] = useState('');
           const [koreanTranslation, setKoreanTranslation] = useState('');
-          const [japanesePromo, setJapanesePromo] = useState('');
+          const [adContent, setAdContent] = useState(null);
           const [isProcessing, setIsProcessing] = useState(false);
           const [processingStep, setProcessingStep] = useState('');
           const [progress, setProgress] = useState(0);
           const [error, setError] = useState('');
 
           const handleApiKeySubmit = () => {
-            if (apiKey.trim().length > 10) {
+            if (assemblyApiKey.trim().length > 10 && openaiApiKey.trim().length > 10) {
               setApiKeySet(true);
               setError('');
             } else {
-              setError('올바른 AssemblyAI API 키를 입력해주세요.');
+              setError('AssemblyAI와 OpenAI API 키를 모두 입력해주세요.');
             }
           };
 
@@ -62,34 +64,32 @@
             setError('');
             setJapaneseText('');
             setKoreanTranslation('');
-            setJapanesePromo('');
+            setAdContent(null);
             
             try {
               setProcessingStep('영상 파일을 Base64로 인코딩 중...');
               setProgress(10);
               
               const uploadUrl = await uploadFile(file);
-              setProgress(30);
+              setProgress(25);
               
               setProcessingStep('음성 인식 요청 중...');
               const transcriptId = await startTranscription(uploadUrl);
-              setProgress(40);
+              setProgress(35);
               
               setProcessingStep('음성 인식 처리 중... (1-2분 소요)');
               const transcription = await pollTranscription(transcriptId);
               setJapaneseText(transcription);
-              setProgress(70);
+              setProgress(60);
               
-              setProcessingStep('한글로 번역 중...');
-              await sleep(1000);
-              const translation = translateToKorean(transcription);
+              setProcessingStep('GPT로 한글 번역 중...');
+              const translation = await translateWithGPT(transcription);
               setKoreanTranslation(translation);
-              setProgress(90);
+              setProgress(80);
               
-              setProcessingStep('Spoon 홍보 문구 생성 중...');
-              await sleep(1000);
-              const promo = generatePromoText(transcription);
-              setJapanesePromo(promo);
+              setProcessingStep('광고 문구 생성 중...');
+              const ads = await generateAds(transcription);
+              setAdContent(ads);
               setProgress(100);
               
               await sleep(500);
@@ -115,11 +115,9 @@
             
             const response = await fetch('/api/upload', {
               method: 'POST',
-              headers: { 
-                'content-type': 'application/json'
-              },
+              headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
-                apiKey: apiKey,
+                apiKey: assemblyApiKey,
                 base64Data: base64Data,
                 contentType: file.type
               })
@@ -137,13 +135,11 @@
           const startTranscription = async (audioUrl) => {
             const response = await fetch('/api/transcribe', {
               method: 'POST',
-              headers: { 
-                'content-type': 'application/json'
-              },
+              headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
                 audio_url: audioUrl,
                 language_code: 'ja',
-                apiKey: apiKey
+                apiKey: assemblyApiKey
               })
             });
             
@@ -158,7 +154,7 @@
 
           const pollTranscription = async (transcriptId) => {
             while (true) {
-              const response = await fetch('/api/status?id=' + transcriptId + '&apiKey=' + apiKey);
+              const response = await fetch('/api/status?id=' + transcriptId + '&apiKey=' + assemblyApiKey);
               
               if (!response.ok) {
                 const errorData = await response.json();
@@ -168,31 +164,53 @@
               const data = await response.json();
               
               if (data.status === 'completed') return data.text;
-              if (data.status === 'error') throw new Error('음성 인식 실패: ' + (data.error || 'Unknown error'));
+              if (data.status === 'error') throw new Error('음성 인식 실패');
               
               await sleep(3000);
             }
           };
 
-          const translateToKorean = (text) => {
-            return '[한글 번역]\n' + text + '\n\n※ 정확한 번역을 위해 Google Translate API를 연동하세요.';
+          const translateWithGPT = async (text) => {
+            const response = await fetch('/api/translate', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                text: text,
+                apiKey: openaiApiKey
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error('번역 실패: ' + (errorData.error || response.status));
+            }
+            
+            const data = await response.json();
+            return data.translation;
           };
 
-          const generatePromoText = (text) => {
-            return '🎙️ この動画が伝えるメッセージを、Spoonで実現しませんか？\n\n' +
-              '【動画の内容】\n' + text + '\n\n' +
-              '✨ Spoon（スプーン）でできること：\n\n' +
-              '📻 ライブ配信\n' +
-              '・リアルタイムでリスナーと交流\n' +
-              '・視聴者からの応援やギフトを受け取れる\n\n' +
-              '🎧 オーディオコンテンツ制作\n' +
-              '・ASMR、ラジオ、音楽、トークなど多様なジャンル\n' +
-              '・あなたの個性を活かしたコンテンツ作り\n\n' +
-              '🌏 グローバルコミュニケーション\n' +
-              '・世界中のリスナーと繋がる\n\n' +
-              '📱 今すぐSpoonを始めよう\n' +
-              '👉 アプリをダウンロードして、あなたの声を世界に届けてください！\n\n' +
-              '#Spoon #ライブ配信 #声で繋がる';
+          const generateAds = async (text) => {
+            const response = await fetch('/api/generate-ads', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                japaneseText: text,
+                apiKey: openaiApiKey
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error('광고 문구 생성 실패: ' + (errorData.error || response.status));
+            }
+            
+            const data = await response.json();
+            return data;
+          };
+
+          const copyToClipboard = (text) => {
+            navigator.clipboard.writeText(text);
+            alert('클립보드에 복사되었습니다!');
           };
 
           if (!apiKeySet) {
@@ -201,18 +219,48 @@
                 <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-3xl p-8 max-w-md w-full border border-white border-opacity-20">
                   <div className="text-center mb-6">
                     <h2 className="text-3xl font-bold text-white mb-2">API 키 입력</h2>
-                    <p className="text-purple-200">AssemblyAI API 키를 입력해주세요</p>
+                    <p className="text-purple-200">AssemblyAI와 OpenAI API 키를 입력해주세요</p>
                   </div>
                   
                   <div className="space-y-4">
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="AssemblyAI API Key"
-                      className="w-full bg-black bg-opacity-30 text-white px-4 py-3 rounded-xl border border-purple-300 border-opacity-30 focus:outline-none focus:border-pink-400"
-                      onKeyPress={(e) => e.key === 'Enter' && handleApiKeySubmit()}
-                    />
+                    <div>
+                      <label className="text-white text-sm mb-2 block">AssemblyAI API Key</label>
+                      <div className="relative">
+                        <input
+                          type={showAssemblyKey ? 'text' : 'password'}
+                          value={assemblyApiKey}
+                          onChange={(e) => setAssemblyApiKey(e.target.value)}
+                          placeholder="AssemblyAI API Key"
+                          className="w-full bg-black bg-opacity-30 text-white px-4 py-3 rounded-xl border border-purple-300 border-opacity-30 focus:outline-none focus:border-pink-400 pr-12"
+                        />
+                        <button
+                          onClick={() => setShowAssemblyKey(!showAssemblyKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-300"
+                        >
+                          {showAssemblyKey ? '👁️' : '👁️‍🗨️'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-white text-sm mb-2 block">OpenAI API Key</label>
+                      <div className="relative">
+                        <input
+                          type={showOpenaiKey ? 'text' : 'password'}
+                          value={openaiApiKey}
+                          onChange={(e) => setOpenaiApiKey(e.target.value)}
+                          placeholder="OpenAI API Key (sk-...)"
+                          className="w-full bg-black bg-opacity-30 text-white px-4 py-3 rounded-xl border border-purple-300 border-opacity-30 focus:outline-none focus:border-pink-400 pr-12"
+                          onKeyPress={(e) => e.key === 'Enter' && handleApiKeySubmit()}
+                        />
+                        <button
+                          onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-300"
+                        >
+                          {showOpenaiKey ? '👁️' : '👁️‍🗨️'}
+                        </button>
+                      </div>
+                    </div>
                     
                     {error && (
                       <div className="bg-red-500 bg-opacity-20 border border-red-400 border-opacity-30 rounded-xl p-3">
@@ -243,9 +291,9 @@
               <main className="max-w-7xl mx-auto px-6 py-12">
                 <div className="text-center mb-12">
                   <h2 className="text-5xl font-bold text-white mb-4">
-                    일본어 영상을 실제로 분석하고<br />
+                    일본어 영상을 분석하고<br />
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-300 to-purple-300">
-                      Spoon 홍보 문구를 자동 생성
+                      광고 문구를 자동 생성
                     </span>
                   </h2>
                 </div>
@@ -262,7 +310,7 @@
                   <label htmlFor="videoUpload" className={`block cursor-pointer ${isProcessing ? 'opacity-50' : ''}`}>
                     <div className="border-2 border-dashed border-purple-300 border-opacity-50 rounded-2xl p-12 text-center hover:border-pink-300 transition-all">
                       <h3 className="text-white text-xl font-semibold mb-2">일본어 영상 파일을 업로드하세요</h3>
-                      <p className="text-purple-200">MP4, MOV, AVI 등 모든 영상 파일 지원</p>
+                      <p className="text-purple-200">MP4, MOV, AVI 등 (작은 파일 추천)</p>
                       {fileName && <p className="text-green-300 font-semibold mt-4">✓ {fileName}</p>}
                     </div>
                   </label>
@@ -306,18 +354,67 @@
                     </div>
 
                     <div className="bg-white bg-opacity-10 rounded-3xl p-8">
-                      <h3 className="text-white text-2xl font-bold mb-4">🇰🇷 한글 번역</h3>
+                      <h3 className="text-white text-2xl font-bold mb-4">🇰🇷 한글 번역 (GPT-4o-mini)</h3>
                       <div className="bg-black bg-opacity-30 rounded-xl p-6">
                         <p className="text-purple-100 whitespace-pre-line leading-relaxed text-lg">{koreanTranslation}</p>
                       </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-pink-500/30 to-purple-500/30 rounded-3xl p-8">
-                      <h3 className="text-white text-2xl font-bold mb-6">✨ 일본어 Spoon 홍보 문구</h3>
-                      <div className="bg-black bg-opacity-30 rounded-xl p-6">
-                        <p className="text-white whitespace-pre-line leading-relaxed">{japanesePromo}</p>
+                    {adContent && (
+                      <div className="bg-gradient-to-br from-pink-500/30 to-purple-500/30 rounded-3xl p-8">
+                        <h3 className="text-white text-3xl font-bold mb-6">✨ 광고 문구</h3>
+                        
+                        <div className="space-y-6">
+                          <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="text-pink-300 font-bold text-lg">📱 Meta 광고제목 (27byte)</h4>
+                              <button onClick={() => copyToClipboard(adContent.meta_title)} className="text-white bg-pink-500 px-3 py-1 rounded text-sm hover:bg-pink-600">복사</button>
+                            </div>
+                            <p className="text-white">{adContent.meta_title}</p>
+                          </div>
+
+                          <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="text-pink-300 font-bold text-lg">📱 Meta 기본문구 (72byte)</h4>
+                              <button onClick={() => copyToClipboard(adContent.meta_body)} className="text-white bg-pink-500 px-3 py-1 rounded text-sm hover:bg-pink-600">복사</button>
+                            </div>
+                            <p className="text-white">{adContent.meta_body}</p>
+                          </div>
+
+                          <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="text-pink-300 font-bold text-lg">📱 Meta 행동유도 (100byte)</h4>
+                              <button onClick={() => copyToClipboard(adContent.meta_cta)} className="text-white bg-pink-500 px-3 py-1 rounded text-sm hover:bg-pink-600">복사</button>
+                            </div>
+                            <p className="text-white">{adContent.meta_cta}</p>
+                          </div>
+
+                          <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="text-purple-300 font-bold text-lg">🎵 TikTok 기본문구 (100byte)</h4>
+                              <button onClick={() => copyToClipboard(adContent.tiktok_body)} className="text-white bg-purple-500 px-3 py-1 rounded text-sm hover:bg-purple-600">복사</button>
+                            </div>
+                            <p className="text-white">{adContent.tiktok_body}</p>
+                          </div>
+
+                          <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="text-purple-300 font-bold text-lg">🎵 TikTok 행동유도 (100byte)</h4>
+                              <button onClick={() => copyToClipboard(adContent.tiktok_cta)} className="text-white bg-purple-500 px-3 py-1 rounded text-sm hover:bg-purple-600">복사</button>
+                            </div>
+                            <p className="text-white">{adContent.tiktok_cta}</p>
+                          </div>
+
+                          <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="text-red-300 font-bold text-lg">📺 YouTube 광고제목 (90byte)</h4>
+                              <button onClick={() => copyToClipboard(adContent.youtube_title)} className="text-white bg-red-500 px-3 py-1 rounded text-sm hover:bg-red-600">복사</button>
+                            </div>
+                            <p className="text-white">{adContent.youtube_title}</p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </main>
