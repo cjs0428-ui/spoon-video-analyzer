@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spoon 영상 분석기 API</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        h1 { margin-top: 0; }
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        ul { line-height: 2; }
+        .status {
+            background: rgba(76, 175, 80, 0.3);
+            padding: 10px 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ Spoon 영상 분석기 API</h1>
+        
+        <div class="status">
+            <strong>✅ 상태: 정상 작동 중</strong>
+        </div>
+        
+        <p>이 사이트는 Spoon 영상 분석기의 백엔드 API 서버입니다.</p>
+        
+        <h2>📡 사용 가능한 API 엔드포인트:</h2>
+        <ul>
+            <li><code>POST /api/upload</code> - 비디오 파일 업로드</li>
+            <li><code>POST /api/transcribe</code> - 음성 인식 시작</li>
+            <li><code>GET /api/status?id={transcript_id}&apiKey={key}</code> - 음성 인식 상태 확인</li>
+        </ul>
+        
+        <h2>🚀 사용 방법:</h2>
+        <p>프론트엔드 애플리케이션에서 이 API 엔드포인트들을 호출하여 사용하세요.</p>
+        
+        <h2>🔧 기술 스택:</h2>
+        <ul>
+            <li>Vercel Serverless Functions</li>
+            <li>AssemblyAI Speech-to-Text API</li>
+            <li>Node.js</li>
+        </ul>
+    </div>
+</body>
+</html>
