@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spoon 영상 분석기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState } = React;
+        
+        function SpoonVideoAnalyzer() {
+          const [apiKey, setApiKey] = useState('');
+          const [showApiKey, setShowApiKey] = useState(false);
+          const [apiKeySet, setApiKeySet] = useState(false);
+          const [videoFile, setVideoFile] = useState(null);
+          const [videoSrc, setVideoSrc] = useState('');
+          const [fileName, setFileName] = useState('');
+          const [japaneseText, setJapaneseText] = useState('');
+          const [koreanTranslation, setKoreanTranslation] = useState('');
+          const [japanesePromo, setJapanesePromo] = useState('');
+          const [isProcessing, setIsProcessing] = useState(false);
+          const [processingStep, setProcessingStep] = useState('');
+          const [progress, setProgress] = useState(0);
+          const [error, setError] = useState('');
+
+          const handleApiKeySubmit = () => {
+            if (apiKey.trim().length > 10) {
+              setApiKeySet(true);
+              setError('');
+            } else {
+              setError('올바른 AssemblyAI API 키를 입력해주세요.');
+            }
+          };
+
+          const handleFileChange = (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            if (!file.type.startsWith('video/')) {
+              alert('동영상 파일만 업로드 가능합니다.');
+              return;
+            }
+            
+            setVideoFile(file);
+            setFileName(file.name);
+            if (videoSrc) URL.revokeObjectURL(videoSrc);
+            const url = URL.createObjectURL(file);
+            setVideoSrc(url);
+            startAnalysis(file);
+          };
+
+          const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+          const startAnalysis = async (file) => {
+            setIsProcessing(true);
+            setError('');
+            setJapaneseText('');
+            setKoreanTranslation('');
+            setJapanesePromo('');
+            
+            try {
+              setProcessingStep('영상 파일을 AssemblyAI에 업로드 중...');
+              setProgress(10);
+              
+              const uploadUrl = await uploadFile(file);
+              setProgress(30);
+              
+              setProcessingStep('음성 인식 요청 중...');
+              const transcriptId = await startTranscription(uploadUrl);
+              setProgress(40);
+              
+              setProcessingStep('음성 인식 처리 중... (1-2분 소요)');
+              const transcription = await pollTranscription(transcriptId);
+              setJapaneseText(transcription);
+              setProgress(70);
+              
+              setProcessingStep('한글로 번역 중...');
+              await sleep(1000);
+              const translation = translateToKorean(transcription);
+              setKoreanTranslation(translation);
+              setProgress(90);
+              
+              setProcessingStep('Spoon 홍보 문구 생성 중...');
+              await sleep(1000);
+              const promo = generatePromoText(transcription);
+              setJapanesePromo(promo);
+              setProgress(100);
+              
+              await sleep(500);
+              setIsProcessing(false);
+              
+            } catch (err) {
+              console.error('분석 오류:', err);
+              setError('오류 발생: ' + err.message);
+              setIsProcessing(false);
+            }
+          };
+
+          const uploadFile = async (file) => {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const response = await fetch('/api/upload', {
+              method: 'POST',
+              headers: { 'x-api-key': apiKey },
+              body: formData
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error('파일 업로드 실패: ' + (errorData.error || response.status));
+            }
+            
+            const data = await response.json();
+            return data.upload_url;
+          };
+
+          const startTranscription = async (audioUrl) => {
+            const response = await fetch('/api/transcribe', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                audio_url: audioUrl,
+                language_code: 'ja',
+                apiKey: apiKey
+              })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error('음성 인식 시작 실패: ' + (errorData.error || response.status));
+            }
+            
+            const data = await response.json();
+            return data.id;
+          };
+
+          const pollTranscription = async (transcriptId) => {
+            while (true) {
+              const response = await fetch('/api/status?id=' + transcriptId + '&apiKey=' + apiKey);
+              
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error('음성 인식 상태 확인 실패: ' + (errorData.error || response.status));
+              }
+              
+              const data = await response.json();
+              
+              if (data.status === 'completed') return data.text;
+              if (data.status === 'error') throw new Error('음성 인식 실패: ' + (data.error || 'Unknown error'));
+              
+              await sleep(3000);
+            }
+          };
+
+          const translateToKorean = (text) => {
+            return '[한글 번역]\n' + text + '\n\n※ 정확한 번역을 위해 Google Translate API를 연동하세요.';
+          };
+
+          const generatePromoText = (text) => {
+            return '🎙️ この動画が伝えるメッセージを、Spoonで実現しませんか？\n\n' +
+              '【動画の内容】\n' + text + '\n\n' +
+              '✨ Spoon（スプーン）でできること：\n\n' +
+              '📻 ライブ配信\n' +
+              '・リアルタイムでリスナーと交流\n' +
+              '・視聴者からの応援やギフトを受け取れる\n\n' +
+              '🎧 オーディオコンテンツ制作\n' +
+              '・ASMR、ラジオ、音楽、トークなど多様なジャンル\n\n' +
+              '🌏 グローバルコミュニケーション\n' +
+              '・世界中のリスナーと繋がる\n\n' +
+              '📱 今すぐSpoonを始めよう\n' +
+              '👉 アプリをダウンロードして、あなたの声を世界に届けてください！\n\n' +
+              '#Spoon #ライブ配信 #声で繋がる';
+          };
+
+          if (!apiKeySet) {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900 flex items-center justify-center p-6">
+                <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-3xl p-8 max-w-md w-full border border-white border-opacity-20">
+                  <div className="text-center mb-6">
+                    <h2 className="text-3xl font-bold text-white mb-2">API 키 입력</h2>
+                    <p className="text-purple-200">AssemblyAI API 키를 입력해주세요</p>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="AssemblyAI API Key"
+                      className="w-full bg-black bg-opacity-30 text-white px-4 py-3 rounded-xl border border-purple-300 border-opacity-30 focus:outline-none focus:border-pink-400"
+                      onKeyPress={(e) => e.key === 'Enter' && handleApiKeySubmit()}
+                    />
+                    
+                    {error && (
+                      <div className="bg-red-500 bg-opacity-20 border border-red-400 border-opacity-30 rounded-xl p-3">
+                        <p className="text-red-200 text-sm">{error}</p>
+                      </div>
+                    )}
+                    
+                    <button
+                      onClick={handleApiKeySubmit}
+                      className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
+                    >
+                      시작하기
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900">
+              <header className="bg-black bg-opacity-30 backdrop-blur-md border-b border-white border-opacity-20">
+                <div className="max-w-7xl mx-auto px-6 py-4">
+                  <h1 className="text-2xl font-bold text-white">🎙️ Spoon 영상 분석기</h1>
+                </div>
+              </header>
+
+              <main className="max-w-7xl mx-auto px-6 py-12">
+                <div className="text-center mb-12">
+                  <h2 className="text-5xl font-bold text-white mb-4">
+                    일본어 영상을 실제로 분석하고<br />
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-300 to-purple-300">
+                      Spoon 홍보 문구를 자동 생성
+                    </span>
+                  </h2>
+                </div>
+
+                <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-3xl p-8 mb-8 border border-white border-opacity-20">
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={handleFileChange}
+                    id="videoUpload"
+                    className="hidden"
+                    disabled={isProcessing}
+                  />
+                  <label htmlFor="videoUpload" className={`block cursor-pointer ${isProcessing ? 'opacity-50' : ''}`}>
+                    <div className="border-2 border-dashed border-purple-300 border-opacity-50 rounded-2xl p-12 text-center hover:border-pink-300 transition-all">
+                      <h3 className="text-white text-xl font-semibold mb-2">일본어 영상 파일을 업로드하세요</h3>
+                      <p className="text-purple-200">MP4, MOV, AVI 등 모든 영상 파일 지원</p>
+                      {fileName && <p className="text-green-300 font-semibold mt-4">✓ {fileName}</p>}
+                    </div>
+                  </label>
+                </div>
+
+                {error && (
+                  <div className="bg-red-500 bg-opacity-20 rounded-2xl p-4 mb-8">
+                    <p className="text-red-100">{error}</p>
+                  </div>
+                )}
+
+                {isProcessing && (
+                  <div className="bg-gradient-to-r from-pink-500/20 to-purple-500/20 rounded-3xl p-8 mb-8">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-pink-300 border-t-transparent"></div>
+                      <p className="text-white text-lg font-semibold">{processingStep}</p>
+                      <div className="w-full max-w-md">
+                        <div className="bg-black bg-opacity-30 rounded-full h-3 overflow-hidden">
+                          <div className="bg-gradient-to-r from-pink-500 to-purple-500 h-full transition-all duration-500" style={{ width: progress + '%' }}></div>
+                        </div>
+                        <p className="text-purple-200 text-sm text-center mt-2">{progress}%</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {videoSrc && !isProcessing && japaneseText && (
+                  <div className="space-y-8">
+                    <div className="bg-black bg-opacity-40 rounded-3xl p-6">
+                      <h3 className="text-white text-2xl font-bold mb-4">📹 업로드된 영상</h3>
+                      <video key={videoSrc} controls className="w-full rounded-xl max-h-96 bg-black">
+                        <source src={videoSrc} type={videoFile?.type || 'video/mp4'} />
+                      </video>
+                    </div>
+
+                    <div className="bg-white bg-opacity-10 rounded-3xl p-8">
+                      <h3 className="text-white text-2xl font-bold mb-4">🇯🇵 인식된 일본어 음성</h3>
+                      <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                        <p className="text-purple-100 whitespace-pre-line leading-relaxed text-lg">{japaneseText}</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white bg-opacity-10 rounded-3xl p-8">
+                      <h3 className="text-white text-2xl font-bold mb-4">🇰🇷 한글 번역</h3>
+                      <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                        <p className="text-purple-100 whitespace-pre-line leading-relaxed text-lg">{koreanTranslation}</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-pink-500/30 to-purple-500/30 rounded-3xl p-8">
+                      <h3 className="text-white text-2xl font-bold mb-6">✨ 일본어 Spoon 홍보 문구</h3>
+                      <div className="bg-black bg-opacity-30 rounded-xl p-6">
+                        <p className="text-white whitespace-pre-line leading-relaxed">{japanesePromo}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </main>
+            </div>
+          );
+        }
+
+        ReactDOM.render(<SpoonVideoAnalyzer />, document.getElementById('root'));
+    </script>
+</body>
+</html>
