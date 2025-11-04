@@ -1,17 +1,7 @@
-import formidable from 'formidable';
-import fs from 'fs';
-import https from 'https';
-
-export const config = {
-  api: {
-    bodyParser: false,
-  }
-};
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -22,56 +12,44 @@ export default async function handler(req, res) {
   }
 
   try {
-    const apiKey = req.headers['x-api-key'];
+    const { apiKey, base64Data, contentType } = req.body;
+
     if (!apiKey) {
       return res.status(400).json({ error: 'API key required' });
     }
 
-    const form = formidable({ maxFileSize: 50 * 1024 * 1024 });
-    
-    const [fields, files] = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve([fields, files]);
-      });
-    });
-
-    const file = files.file?.[0] || files.file;
-    
-    if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+    if (!base64Data) {
+      return res.status(400).json({ error: 'No file data' });
     }
 
-    const fileBuffer = fs.readFileSync(file.filepath);
-    
-    const uploadUrl = await new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.assemblyai.com',
-        path: '/v2/upload',
-        method: 'POST',
-        headers: {
-          'authorization': apiKey,
-          'content-type': file.mimetype || 'video/mp4',
-          'content-length': fileBuffer.length
-        }
-      };
+    // Base64를 Buffer로 변환
+    const buffer = Buffer.from(base64Data, 'base64');
 
-      const apiReq = https.request(options, (apiRes) => {
-        let data = '';
-        apiRes.on('data', chunk => data += chunk);
-        apiRes.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            if (apiRes.statusCode === 200) {
-              resolve(parsed.upload_url);
-            } else {
-              reject(new Error(`AssemblyAI error: ${apiRes.statusCode}`));
-            }
-          } catch (e) {
-            reject(e);
-          }
-        });
+    // AssemblyAI에 업로드
+    const response = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: {
+        'authorization': apiKey,
+        'content-type': contentType || 'video/mp4'
+      },
+      body: buffer
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AssemblyAI error:', errorText);
+      return res.status(response.status).json({ 
+        error: `Upload failed: ${response.status}`
       });
+    }
 
-      apiReq.on('error', reject);
-      apiReq.write(fileBuf
+    const data = await response.json();
+    return res.status(200).json(data);
+
+  } catch (error) {
+    console.error('Upload error:', error);
+    return res.status(500).json({ 
+      error: error.message 
+    });
+  }
+}
