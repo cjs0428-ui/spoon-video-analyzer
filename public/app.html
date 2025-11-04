@@ -26,11 +26,14 @@
           const [fileName, setFileName] = useState('');
           const [japaneseText, setJapaneseText] = useState('');
           const [koreanTranslation, setKoreanTranslation] = useState('');
+          const [userPrompt, setUserPrompt] = useState('');
           const [adContent, setAdContent] = useState(null);
           const [isProcessing, setIsProcessing] = useState(false);
+          const [isGeneratingAds, setIsGeneratingAds] = useState(false);
           const [processingStep, setProcessingStep] = useState('');
           const [progress, setProgress] = useState(0);
           const [error, setError] = useState('');
+          const [showPromptInput, setShowPromptInput] = useState(false);
 
           const handleApiKeySubmit = () => {
             if (assemblyApiKey.trim().length > 10 && openaiApiKey.trim().length > 10) {
@@ -54,6 +57,9 @@
             if (videoSrc) URL.revokeObjectURL(videoSrc);
             const url = URL.createObjectURL(file);
             setVideoSrc(url);
+            setAdContent(null);
+            setUserPrompt('');
+            setShowPromptInput(false);
             startAnalysis(file);
           };
 
@@ -64,41 +70,56 @@
             setError('');
             setJapaneseText('');
             setKoreanTranslation('');
-            setAdContent(null);
             
             try {
               setProcessingStep('영상 파일을 Base64로 인코딩 중...');
               setProgress(10);
               
               const uploadUrl = await uploadFile(file);
-              setProgress(25);
+              setProgress(30);
               
               setProcessingStep('음성 인식 요청 중...');
               const transcriptId = await startTranscription(uploadUrl);
-              setProgress(35);
+              setProgress(40);
               
               setProcessingStep('음성 인식 처리 중... (1-2분 소요)');
               const transcription = await pollTranscription(transcriptId);
               setJapaneseText(transcription);
-              setProgress(60);
+              setProgress(70);
               
               setProcessingStep('GPT로 한글 번역 중...');
               const translation = await translateWithGPT(transcription);
               setKoreanTranslation(translation);
-              setProgress(80);
-              
-              setProcessingStep('광고 문구 생성 중...');
-              const ads = await generateAds(transcription);
-              setAdContent(ads);
               setProgress(100);
               
               await sleep(500);
               setIsProcessing(false);
+              setShowPromptInput(true);
               
             } catch (err) {
               console.error('분석 오류:', err);
               setError('오류 발생: ' + err.message);
               setIsProcessing(false);
+            }
+          };
+
+          const handleGenerateAds = async () => {
+            if (!userPrompt.trim()) {
+              alert('광고 문구 생성 지시사항을 입력해주세요.');
+              return;
+            }
+
+            setIsGeneratingAds(true);
+            setError('');
+            
+            try {
+              const ads = await generateAds(japaneseText, koreanTranslation, userPrompt);
+              setAdContent(ads);
+              setIsGeneratingAds(false);
+            } catch (err) {
+              console.error('광고 생성 오류:', err);
+              setError('광고 문구 생성 실패: ' + err.message);
+              setIsGeneratingAds(false);
             }
           };
 
@@ -189,12 +210,14 @@
             return data.translation;
           };
 
-          const generateAds = async (text) => {
+          const generateAds = async (japaneseText, koreanText, userPrompt) => {
             const response = await fetch('/api/generate-ads', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
-                japaneseText: text,
+                japaneseText: japaneseText,
+                koreanText: koreanText,
+                userPrompt: userPrompt,
                 apiKey: openaiApiKey
               })
             });
@@ -360,9 +383,30 @@
                       </div>
                     </div>
 
+                    {showPromptInput && (
+                      <div className="bg-gradient-to-br from-yellow-500/30 to-orange-500/30 rounded-3xl p-8 border border-yellow-300 border-opacity-40">
+                        <h3 className="text-white text-2xl font-bold mb-4">💡 광고 문구 생성 지시사항</h3>
+                        <p className="text-yellow-100 mb-4">위 번역 내용을 참고하여, 어떤 스타일의 광고 문구를 원하시는지 작성해주세요.</p>
+                        <textarea
+                          value={userPrompt}
+                          onChange={(e) => setUserPrompt(e.target.value)}
+                          placeholder="예시: 젊은 여성 타겟으로 감성적이고 따뜻한 톤으로 작성해주세요. ASMR과 힐링을 강조해주세요."
+                          className="w-full bg-black bg-opacity-30 text-white px-4 py-3 rounded-xl border border-yellow-300 border-opacity-30 focus:outline-none focus:border-yellow-400 h-32 resize-none"
+                          disabled={isGeneratingAds}
+                        />
+                        <button
+                          onClick={handleGenerateAds}
+                          disabled={isGeneratingAds}
+                          className={`mt-4 w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-8 py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all ${isGeneratingAds ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {isGeneratingAds ? '생성 중...' : '광고 문구 생성하기 ✨'}
+                        </button>
+                      </div>
+                    )}
+
                     {adContent && (
                       <div className="bg-gradient-to-br from-pink-500/30 to-purple-500/30 rounded-3xl p-8">
-                        <h3 className="text-white text-3xl font-bold mb-6">✨ 광고 문구</h3>
+                        <h3 className="text-white text-3xl font-bold mb-6">✨ 생성된 광고 문구</h3>
                         
                         <div className="space-y-6">
                           <div className="bg-black bg-opacity-30 rounded-xl p-6">
