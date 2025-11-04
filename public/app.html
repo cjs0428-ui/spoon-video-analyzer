@@ -65,7 +65,7 @@
             setJapanesePromo('');
             
             try {
-              setProcessingStep('영상 파일을 AssemblyAI에 업로드 중...');
+              setProcessingStep('영상 파일을 Base64로 인코딩 중...');
               setProgress(10);
               
               const uploadUrl = await uploadFile(file);
@@ -103,13 +103,26 @@
           };
 
           const uploadFile = async (file) => {
-            const formData = new FormData();
-            formData.append('file', file);
+            const base64Data = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const base64 = reader.result.split(',')[1];
+                resolve(base64);
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
             
             const response = await fetch('/api/upload', {
               method: 'POST',
-              headers: { 'x-api-key': apiKey },
-              body: formData
+              headers: { 
+                'content-type': 'application/json'
+              },
+              body: JSON.stringify({
+                apiKey: apiKey,
+                base64Data: base64Data,
+                contentType: file.type
+              })
             });
             
             if (!response.ok) {
@@ -124,7 +137,9 @@
           const startTranscription = async (audioUrl) => {
             const response = await fetch('/api/transcribe', {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
+              headers: { 
+                'content-type': 'application/json'
+              },
               body: JSON.stringify({
                 audio_url: audioUrl,
                 language_code: 'ja',
@@ -171,7 +186,8 @@
               '・リアルタイムでリスナーと交流\n' +
               '・視聴者からの応援やギフトを受け取れる\n\n' +
               '🎧 オーディオコンテンツ制作\n' +
-              '・ASMR、ラジオ、音楽、トークなど多様なジャンル\n\n' +
+              '・ASMR、ラジオ、音楽、トークなど多様なジャンル\n' +
+              '・あなたの個性を活かしたコンテンツ作り\n\n' +
               '🌏 グローバルコミュニケーション\n' +
               '・世界中のリスナーと繋がる\n\n' +
               '📱 今すぐSpoonを始めよう\n' +
