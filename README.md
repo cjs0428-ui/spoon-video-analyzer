@@ -1,1 +1,1 @@
-"# Spoon Video Analyzer"
+# Spoon Video Analyzer
