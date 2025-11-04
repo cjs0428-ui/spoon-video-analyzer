@@ -27,7 +27,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'API key required' });
     }
 
-    // formidable로 파일 파싱
     const form = formidable({ maxFileSize: 50 * 1024 * 1024 });
     
     const [fields, files] = await new Promise((resolve, reject) => {
@@ -43,10 +42,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // 파일을 읽어서 AssemblyAI에 전송
     const fileBuffer = fs.readFileSync(file.filepath);
     
-    // https 모듈로 직접 요청
     const uploadUrl = await new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.assemblyai.com',
@@ -77,19 +74,4 @@ export default async function handler(req, res) {
       });
 
       apiReq.on('error', reject);
-      apiReq.write(fileBuffer);
-      apiReq.end();
-    });
-
-    // 임시 파일 삭제
-    fs.unlinkSync(file.filepath);
-
-    return res.status(200).json({ upload_url: uploadUrl });
-
-  } catch (error) {
-    console.error('Upload error:', error);
-    return res.status(500).json({ 
-      error: error.message 
-    });
-  }
-}
+      apiReq.write(fileBuf
