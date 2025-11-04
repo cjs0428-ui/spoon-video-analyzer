@@ -1,12 +1,16 @@
 {
   "name": "spoon-video-analyzer",
   "version": "1.0.0",
-  "description": "Spoon 영상 분석기",
+  "description": "Spoon 영상 분석기 - AssemblyAI 음성 인식",
   "main": "index.js",
   "scripts": {
-    "dev": "vercel dev"
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
   },
-  "keywords": ["spoon", "video", "analyzer"],
+  "dependencies": {
+    "formidable": "^3.5.1"
+  },
+  "keywords": ["spoon", "video", "analyzer", "assemblyai"],
   "author": "",
   "license": "MIT"
 }
