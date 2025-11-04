@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -24,30 +26,22 @@ export default async function handler(req, res) {
 
     const buffer = Buffer.from(base64Data, 'base64');
 
-    const response = await fetch('https://api.assemblyai.com/v2/upload', {
-      method: 'POST',
+    const response = await axios.post('https://api.assemblyai.com/v2/upload', buffer, {
       headers: {
         'authorization': apiKey,
-        'content-type': contentType || 'video/mp4'
+        'content-type': contentType || 'video/mp4',
+        'content-length': buffer.length
       },
-      body: buffer
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AssemblyAI error:', errorText);
-      return res.status(response.status).json({ 
-        error: 'Upload failed: ' + response.status
-      });
-    }
-
-    const data = await response.json();
-    return res.status(200).json(data);
+    return res.status(200).json(response.data);
 
   } catch (error) {
-    console.error('Upload error:', error);
-    return res.status(500).json({ 
-      error: error.message 
+    console.error('Upload error:', error.response?.data || error.message);
+    return res.status(error.response?.status || 500).json({ 
+      error: error.response?.data?.error || error.message
     });
   }
 }
