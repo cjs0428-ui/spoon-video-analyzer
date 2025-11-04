@@ -1,0 +1,12 @@
+{
+  "name": "spoon-video-analyzer",
+  "version": "1.0.0",
+  "description": "Spoon 영상 분석기",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "keywords": ["spoon", "video", "analyzer"],
+  "author": "",
+  "license": "MIT"
+}
